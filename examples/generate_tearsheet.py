@@ -10,12 +10,10 @@ Usage:
     uv run python examples/generate_tearsheet.py
 """
 
-from pathlib import Path
-
 from sandtable import (
-    CSVDataHandler,
     FixedSlippage,
     MACrossoverStrategy,
+    YFinanceDataHandler,
     get_logger,
     run_backtest,
     settings,
@@ -23,12 +21,10 @@ from sandtable import (
 
 logger = get_logger(__name__)
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-
 
 def main() -> None:
     ## 1. Run backtest
-    data = CSVDataHandler(DATA_DIR / "sample_ohlcv.csv", "SPY")
+    data = YFinanceDataHandler(symbol="SPY", start="2022-01-01", end="2024-12-31")
 
     result = run_backtest(
         strategy=MACrossoverStrategy(fast_period=10, slow_period=30),

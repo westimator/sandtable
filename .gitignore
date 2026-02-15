@@ -12,6 +12,7 @@ build/
 # Cache
 .cache/
 .pytest_cache/
+.coverage
 
 # IDE
 .vscode/

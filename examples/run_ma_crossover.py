@@ -1,12 +1,12 @@
 """
-examples/advanced/run_ma_crossover.py
+examples/run_ma_crossover.py
 
 Advanced example: manual component wiring for full control.
 Most users should use the high-level `run_backtest()` API instead.
 See examples/quick_start.py for the recommended approach.
 
 Usage:
-    uv run python examples/advanced/run_ma_crossover.py
+    uv run python examples/run_ma_crossover.py
 """
 
 import logging
@@ -25,7 +25,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
 def main() -> int:

@@ -1,12 +1,12 @@
 """
-examples/advanced/visualize_backtest.py
+examples/visualize_backtest.py
 
 Advanced example: visualize backtest results with charts and animation.
 Uses manual component wiring for full control.
 
 Usage:
-    uv run python examples/advanced/visualize_backtest.py
-    uv run python examples/advanced/visualize_backtest.py --animate
+    uv run python examples/visualize_backtest.py
+    uv run python examples/visualize_backtest.py --animate
 """
 
 import argparse
@@ -29,7 +29,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
 def do_backtest():
