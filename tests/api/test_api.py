@@ -7,16 +7,14 @@ Tests for the research API (run_backtest, run_parameter_sweep).
 from dataclasses import dataclass
 from pathlib import Path
 
-import pytest
-
-from sandtable.api import run_backtest, run_parameter_sweep, SweepResult
-from sandtable.metrics import Metric
+from sandtable.api import SweepResult, run_backtest, run_parameter_sweep
 from sandtable.core.events import Direction, MarketDataEvent, SignalEvent
 from sandtable.core.result import BacktestResult
 from sandtable.data_handlers.csv_data_handler import CSVDataHandler
 from sandtable.data_handlers.multi_handler import MultiDataHandler
 from sandtable.execution.simulator import ExecutionConfig
 from sandtable.execution.slippage import FixedSlippage
+from sandtable.metrics import Metric
 from sandtable.strategy.abstract_strategy import AbstractStrategy
 
 DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "sample_ohlcv.csv"

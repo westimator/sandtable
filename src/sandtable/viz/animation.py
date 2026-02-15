@@ -9,9 +9,9 @@ from datetime import datetime
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 import numpy as np
 import pandas as pd
+from matplotlib.animation import FuncAnimation
 
 from sandtable.core.events import Direction, FillEvent
 from sandtable.portfolio.portfolio import EquityPoint
@@ -96,7 +96,7 @@ def animate_backtest(
     sell_scatter = ax_price.scatter([], [], marker="v", color="red", s=120, label="Sell", zorder=5)
 
     equity_line, = ax_equity.plot([], [], color="darkgreen", linewidth=2, label="Equity")
-    initial_line = ax_equity.axhline(y=initial_equity, color="gray", linestyle="--", alpha=0.5, label="Initial")
+    _initial_line = ax_equity.axhline(y=initial_equity, color="gray", linestyle="--", alpha=0.5, label="Initial")
 
     # Labels and legends
     ax_price.set_ylabel("Price ($)")

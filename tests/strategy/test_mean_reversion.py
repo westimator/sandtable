@@ -11,7 +11,6 @@ import pytest
 from sandtable.core.events import Direction, MarketDataEvent
 from sandtable.strategy.mean_reversion import MeanReversionStrategy
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -75,7 +75,7 @@ def main():
     output_dir.mkdir(exist_ok=True)
 
     logger.info("Creating static chart...")
-    fig = plot_backtest_results(
+    _fig = plot_backtest_results(
         equity_curve=portfolio.equity_curve,
         trades=portfolio.trades,
         price_data=price_data,
@@ -87,7 +87,7 @@ def main():
 
     if args.animate:
         logger.info("Starting animated replay (close window to exit)...")
-        anim = animate_backtest(
+        _anim = animate_backtest(
             equity_curve=portfolio.equity_curve,
             trades=portfolio.trades,
             price_data=price_data,

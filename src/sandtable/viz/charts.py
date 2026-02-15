@@ -4,7 +4,6 @@ src/sandtable/viz/charts.py
 Static chart visualizations for backtest results.
 """
 
-from datetime import datetime
 
 import matplotlib.pyplot as plt
 import pandas as pd

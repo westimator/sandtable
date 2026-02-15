@@ -178,7 +178,7 @@ class TestLookaheadPrevention:
         all_closes = [101.0, 102.0, 103.0, 104.0, 105.0, 106.0, 107.0, 108.0]
 
         for i in range(8):
-            current_bar = handler.get_next_bar()
+            handler.get_next_bar()
             historical = handler.get_historical_bars(100)
 
             # Historical should only have bars up to and including current

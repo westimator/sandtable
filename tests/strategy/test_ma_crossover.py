@@ -14,7 +14,6 @@ import pytest
 from sandtable.core.events import Direction, MarketDataEvent, SignalEvent
 from sandtable.strategy.ma_crossover import MACrossoverStrategy
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

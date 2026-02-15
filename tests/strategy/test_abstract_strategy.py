@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 from sandtable.core.events import Direction, MarketDataEvent, SignalEvent
 from sandtable.strategy.abstract_strategy import AbstractStrategy
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -15,7 +15,6 @@ import pytest
 from sandtable.core.events import MarketDataEvent
 from sandtable.data_handlers.single_symbol_handler import SingleSymbolDataHandler
 
-
 # ── Minimal concrete subclass ────────────────────────────────────────
 
 
