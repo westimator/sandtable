@@ -26,7 +26,15 @@ Traditional backtesting frameworks often allow direct access to future data, mak
                            └─────────────────┘
 ```
 
-## Setup
+## Installation
+
+```bash
+pip install sandtable
+```
+
+See [sandtable on PyPI](https://pypi.org/project/sandtable/) for available versions.
+
+### Development setup
 
 Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
 
@@ -207,22 +215,19 @@ executor = ExecutionSimulator(
 ## Project structure
 
 ```
-sandtable/
-├── src/sandtable/
-│   ├── __init__.py        # Public API exports
-│   ├── api.py             # run_backtest(), run_parameter_sweep()
-│   ├── core/              # Events, queue, backtest engine, result
-│   ├── data_handlers/     # DataHandler protocol, CSV, yfinance, multi-symbol
-│   ├── strategy/          # Strategy base class and implementations
-│   ├── execution/         # Slippage, impact, and fill simulation
-│   ├── portfolio/         # Position and cash management
-│   ├── metrics/           # Performance calculation
-│   ├── report/            # HTML tearsheet and strategy comparison
-│   └── viz/               # matplotlib charts and animation
-├── tests/                 # Unit tests
-├── data/                  # Sample OHLCV data
-├── examples/              # Example scripts
-└── pyproject.toml
+src/sandtable/
+├── __init__.py        # Public API exports
+├── api.py             # run_backtest(), run_parameter_sweep()
+├── config.py          # Configuration dataclasses
+├── core/              # Events, queue, backtest engine, result
+├── data_handlers/     # DataHandler protocol, CSV, yfinance, multi-symbol
+├── strategy/          # Strategy base class and implementations
+├── execution/         # Slippage, impact, and fill simulation
+├── portfolio/         # Position and cash management
+├── metrics/           # Performance calculation
+├── report/            # HTML tearsheet and strategy comparison
+├── utils/             # Shared utilities
+└── viz/               # matplotlib charts and animation
 ```
 
 ## Running tests
@@ -260,6 +265,21 @@ The `PerformanceMetrics` dataclass includes:
 | Returns | `total_return`, `cagr` |
 | Risk | `sharpe_ratio`, `sortino_ratio`, `max_drawdown` |
 | Trades | `num_trades`, `win_rate`, `profit_factor`, `avg_trade_pnl` |
+
+## Further reading
+
+Related concepts:
+
+- [Backtesting](https://en.wikipedia.org/wiki/Backtesting)
+- [Event-driven architecture](https://en.wikipedia.org/wiki/Event-driven_architecture)
+- [Moving average crossover](https://en.wikipedia.org/wiki/Moving_average_crossover)
+- [Mean reversion](https://en.wikipedia.org/wiki/Mean_reversion_(finance))
+- [Sharpe ratio](https://en.wikipedia.org/wiki/Sharpe_ratio)
+- [Sortino ratio](https://en.wikipedia.org/wiki/Sortino_ratio)
+- [Maximum drawdown](https://en.wikipedia.org/wiki/Drawdown_(economics))
+- [CAGR](https://en.wikipedia.org/wiki/Compound_annual_growth_rate)
+- [Slippage](https://en.wikipedia.org/wiki/Slippage_(finance))
+- [Market impact](https://en.wikipedia.org/wiki/Market_impact)
 
 ## License
 
