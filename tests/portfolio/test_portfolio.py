@@ -1,4 +1,5 @@
-"""tests/portfolio/test_portfolio.py
+"""
+tests/portfolio/test_portfolio.py
 
 Tests for portfolio management.
 """
@@ -7,8 +8,8 @@ from datetime import datetime
 
 import pytest
 
-from backtester.core.events import Direction, FillEvent, MarketDataEvent, SignalEvent
-from backtester.portfolio.portfolio import Portfolio, Position
+from sandtable.core.events import Direction, FillEvent, MarketDataEvent, SignalEvent
+from sandtable.portfolio.portfolio import Portfolio, Position
 
 
 @pytest.fixture

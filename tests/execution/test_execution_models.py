@@ -1,4 +1,5 @@
-"""tests/execution/test_execution_models.py
+"""
+tests/execution/test_execution_models.py
 
 Tests for execution models (slippage, impact, simulator).
 """
@@ -7,10 +8,10 @@ from datetime import datetime
 
 import pytest
 
-from backtester.core.events import Direction, MarketDataEvent, OrderEvent, OrderType
-from backtester.execution.impact import NoMarketImpact, SquareRootImpactModel
-from backtester.execution.simulator import ExecutionConfig, ExecutionSimulator
-from backtester.execution.slippage import FixedSlippage, SpreadSlippage, ZeroSlippage
+from sandtable.core.events import Direction, MarketDataEvent, OrderEvent, OrderType
+from sandtable.execution.impact import NoMarketImpact, SquareRootImpactModel
+from sandtable.execution.simulator import ExecutionConfig, ExecutionSimulator
+from sandtable.execution.slippage import FixedSlippage, SpreadSlippage, ZeroSlippage
 
 
 @pytest.fixture

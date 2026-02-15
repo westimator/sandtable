@@ -1,4 +1,5 @@
-"""tests/core/test_event_queue.py
+"""
+tests/core/test_event_queue.py
 
 Tests for EventQueue functionality.
 """
@@ -7,8 +8,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from backtester.core.event_queue import EventQueue
-from backtester.core.events import (
+from sandtable.core.event_queue import EventQueue
+from sandtable.core.events import (
     Direction,
     MarketDataEvent,
     OrderEvent,

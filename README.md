@@ -1,4 +1,4 @@
-# Event-driven backtester
+# sandtable
 
 A Python backtesting framework where all components communicate exclusively through a central event queue. This design enforces temporal causality and prevents look-ahead bias by construction.
 
@@ -37,62 +37,82 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # create venv and install dependencies
 uv sync
 
-# or with dev dependencies (pytest, ruff)
-uv sync --dev
+# install with all extras (yfinance, matplotlib, plotly)
+uv pip install -e ".[all]"
 
-# or with everything
-uv sync --all-extras
-
-# install package in editable mode (so project imports work)
-uv pip install -e .
+# or with dev dependencies (pytest, ruff, viz, reports)
+uv pip install -e ".[dev]"
 ```
 
 ## Quick start
 
-Run the example MA crossover backtest:
+### One-liner API
+
+```python
+from sandtable import run_backtest, AbstractStrategy, SignalEvent, MarketDataEvent, Direction, FixedSlippage
+
+class MeanReversion(AbstractStrategy):
+    lookback: int = 20
+    threshold: float = 2.0
+
+    def generate_signal(self, bar: MarketDataEvent) -> SignalEvent | None:
+        closes = self.get_historical_closes(self.lookback)
+        if len(closes) < self.lookback:
+            return None
+        mean = sum(closes) / len(closes)
+        std = (sum((c - mean) ** 2 for c in closes) / len(closes)) ** 0.5
+        if std == 0:
+            return None
+        z_score = (bar.close - mean) / std
+        if z_score < -self.threshold:
+            return SignalEvent(
+                timestamp=bar.timestamp, symbol=bar.symbol,
+                direction=Direction.LONG, strength=1.0,
+            )
+        return None
+
+result = run_backtest(
+    strategy=MeanReversion(),
+    symbols="SPY",
+    start="2022-01-01", end="2023-12-31",
+    slippage=FixedSlippage(bps=5),
+    commission=0.005,
+)
+print(result.metrics)
+result.tearsheet("tearsheet.html")
+```
+
+### Parameter sweep
+
+```python
+from sandtable import Metric, run_parameter_sweep
+
+sweep = run_parameter_sweep(
+    strategy_class=MeanReversion,
+    param_grid={"lookback": [10, 20, 30], "threshold": [1.5, 2.0, 2.5]},
+    symbols="SPY",
+    start="2022-01-01", end="2023-12-31",
+    metric=Metric.SHARPE_RATIO,
+)
+print(sweep.best_params)
+print(sweep.to_dataframe())
+```
+
+### Run the example
 
 ```bash
-uv run python examples/run_ma_crossover.py
-```
-
-Example output:
-```
-Loading data from: data/sample_ohlcv.csv
-Running backtest on 501 bars of SPY...
-Strategy: MA Crossover (fast=10, slow=30)
-Initial capital: $100,000.00
-
-============================================================
-BACKTEST RESULTS
-============================================================
-PerformanceMetrics(
-  Returns:
-    total_return:  -0.06%
-    cagr:          -0.03%
-  Risk:
-    sharpe_ratio:  -0.01
-    sortino_ratio: -0.01
-    max_drawdown:  2.54%
-  Trades:
-    num_trades:    16
-    win_rate:      37.5%
-    profit_factor: 0.65
-    avg_trade_pnl: $-63.22
-  ...
-)
+uv run python examples/quick_start.py
 ```
 
 ## Usage
 
-### Basic backtest
+### Basic backtest (manual wiring)
 
 ```python
-from backtester.core.backtest import Backtest
-from backtester.data.data_handler import CSVDataHandler
-from backtester.strategy.ma_crossover import MACrossoverStrategy
-from backtester.execution.simulator import ExecutionSimulator, ExecutionConfig
-from backtester.execution.slippage import FixedSlippage
-from backtester.portfolio.portfolio import Portfolio
+from sandtable import CSVDataHandler, MACrossoverStrategy
+from sandtable.core import Backtest
+from sandtable.execution import ExecutionConfig, ExecutionSimulator, FixedSlippage
+from sandtable.portfolio import Portfolio
 
 # set up components
 data = CSVDataHandler("data/sample_ohlcv.csv", "SPY")
@@ -112,10 +132,9 @@ print(metrics)
 ### Custom strategy
 
 ```python
-from backtester.strategy.base import Strategy
-from backtester.core.events import MarketDataEvent, SignalEvent, Direction
+from sandtable import AbstractStrategy, MarketDataEvent, SignalEvent, Direction
 
-class MyStrategy(Strategy):
+class MyStrategy(AbstractStrategy):
     def generate_signal(self, bar: MarketDataEvent) -> SignalEvent | None:
         closes = self.get_historical_closes(20)
         if len(closes) < 20:
@@ -132,11 +151,41 @@ class MyStrategy(Strategy):
         return None
 ```
 
+### Multi-symbol backtest
+
+```python
+from sandtable import run_backtest
+
+result = run_backtest(
+    strategy=MyStrategy(),
+    symbols=["SPY", "QQQ", "IWM"],
+    start="2022-01-01", end="2023-12-31",
+)
+```
+
+### Tearsheet and comparison
+
+```python
+# Single strategy tearsheet
+result.tearsheet("tearsheet.html")
+
+# Compare multiple strategies
+from sandtable import compare_strategies
+
+compare_strategies(
+    {"Strategy A": result_a, "Strategy B": result_b},
+    output_path="comparison.html",
+)
+```
+
 ### Execution models
 
 ```python
-from backtester.execution.slippage import ZeroSlippage, FixedSlippage, SpreadSlippage
-from backtester.execution.impact import NoMarketImpact, SquareRootImpactModel
+from sandtable.execution import (
+    ExecutionConfig, ExecutionSimulator,
+    ZeroSlippage, FixedSlippage, SpreadSlippage,
+    NoMarketImpact, SquareRootImpactModel,
+)
 
 # no transaction costs (unrealistic baseline)
 executor = ExecutionSimulator(
@@ -158,17 +207,21 @@ executor = ExecutionSimulator(
 ## Project structure
 
 ```
-event-backtester/
-├── src/backtester/
-│   ├── core/           # Events, queue, backtest engine
-│   ├── data/           # Data loading and handling
-│   ├── strategy/       # Strategy base class and implementations
-│   ├── execution/      # Slippage, impact, and fill simulation
-│   ├── portfolio/      # Position and cash management
-│   └── metrics/        # Performance calculation
-├── tests/              # Unit tests (92 tests)
-├── data/               # Sample OHLCV data
-├── examples/           # Example scripts
+sandtable/
+├── src/sandtable/
+│   ├── __init__.py        # Public API exports
+│   ├── api.py             # run_backtest(), run_parameter_sweep()
+│   ├── core/              # Events, queue, backtest engine, result
+│   ├── data_handlers/     # DataHandler protocol, CSV, yfinance, multi-symbol
+│   ├── strategy/          # Strategy base class and implementations
+│   ├── execution/         # Slippage, impact, and fill simulation
+│   ├── portfolio/         # Position and cash management
+│   ├── metrics/           # Performance calculation
+│   ├── report/            # HTML tearsheet and strategy comparison
+│   └── viz/               # matplotlib charts and animation
+├── tests/                 # Unit tests
+├── data/                  # Sample OHLCV data
+├── examples/              # Example scripts
 └── pyproject.toml
 ```
 
@@ -176,13 +229,17 @@ event-backtester/
 
 ```bash
 # run all tests
-uv run pytest
+uv run python -m pytest
 
 # run with verbose output
-uv run pytest -v
+uv run python -m pytest -v
 
 # run specific test file
-uv run pytest tests/core/test_event_queue.py
+uv run python -m pytest tests/core/test_event_queue.py
+
+# run with coverage
+uv run python -m coverage run --include="src/sandtable/*" -m pytest tests/
+uv run python -m coverage report --show-missing
 ```
 
 ## Design decisions
@@ -192,6 +249,7 @@ uv run pytest tests/core/test_event_queue.py
 3. <ins>Fill Price Bounds:</ins> Fill prices are clamped to the bar's `[low, high]` range
 4. <ins>Short Positions:</ins> Cash increases on short sale, decreases on cover, with correct P&L tracking
 5. <ins>Warmup Period:</ins> Strategies return `None` until they have enough data for their indicators
+6. <ins>Multi-symbol:</ins> `MultiDataHandler` merges bars from multiple sources via min-heap for correct temporal ordering
 
 ## Performance metrics
 

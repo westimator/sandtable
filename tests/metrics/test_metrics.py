@@ -1,4 +1,5 @@
-"""tests/metrics/test_metrics.py
+"""
+tests/metrics/test_metrics.py
 
 Tests for performance metrics calculation.
 """
@@ -7,8 +8,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from backtester.core.events import Direction, FillEvent
-from backtester.metrics.performance import (
+from sandtable.core.events import Direction, FillEvent
+from sandtable.metrics.performance import (
     PerformanceMetrics,
     _calculate_cagr,
     _calculate_max_drawdown,
@@ -16,7 +17,7 @@ from backtester.metrics.performance import (
     _calculate_sortino_ratio,
     calculate_metrics,
 )
-from backtester.portfolio.portfolio import EquityPoint
+from sandtable.portfolio.portfolio import EquityPoint
 
 
 def make_equity_curve(equities: list[float]) -> list[EquityPoint]:
@@ -340,6 +341,7 @@ class TestPerformanceMetricsStr:
             sharpe_ratio=1.5,
             sortino_ratio=2.0,
             max_drawdown=0.15,
+            num_fills=100,
             num_trades=50,
             win_rate=0.55,
             profit_factor=1.8,
