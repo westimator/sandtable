@@ -1,5 +1,7 @@
 # sandtable
 
+[![Tests](https://github.com/westimator/sandtable/actions/workflows/tests.yml/badge.svg)](https://github.com/westimator/sandtable/actions/workflows/tests.yml)
+
 A Python backtesting framework where all components communicate exclusively through a central event queue. This design enforces temporal causality and prevents look-ahead bias by construction.
 
 ## Why event-driven?
