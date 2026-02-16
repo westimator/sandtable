@@ -81,7 +81,7 @@ def main() -> None:
     # Generate tearsheet
     output_dir = settings.BACKTESTER_OUTPUT_DIR
     output_dir.mkdir(exist_ok=True)
-    out = output_dir / "multi_asset_tearsheet.html"
+    out = output_dir / "multi_asset_tearsheet.pdf"
     result.tearsheet(output_path=str(out))
     logger.info("Tearsheet saved to %s", out.resolve())
 

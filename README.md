@@ -87,7 +87,7 @@ result = run_backtest(
     commission=0.005,
 )
 print(result.metrics)
-result.tearsheet("tearsheet.html")
+result.tearsheet("tearsheet.pdf")
 ```
 
 ### Parameter sweep
@@ -175,14 +175,14 @@ result = run_backtest(
 
 ```python
 # Single strategy tearsheet
-result.tearsheet("tearsheet.html")
+result.tearsheet("tearsheet.pdf")
 
 # Compare multiple strategies
 from sandtable import compare_strategies
 
 compare_strategies(
     {"Strategy A": result_a, "Strategy B": result_b},
-    output_path="comparison.html",
+    output_path="comparison.pdf",
 )
 ```
 
@@ -225,7 +225,7 @@ src/sandtable/
 ├── execution/         # Slippage, impact, and fill simulation
 ├── portfolio/         # Position and cash management
 ├── metrics/           # Performance calculation
-├── report/            # HTML tearsheet and strategy comparison
+├── report/            # PDF tearsheet and strategy comparison
 ├── utils/             # Shared utilities
 └── viz/               # matplotlib charts and animation
 ```

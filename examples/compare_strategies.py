@@ -75,7 +75,7 @@ def main() -> None:
     ## Generate comparison report
     output_dir = settings.BACKTESTER_OUTPUT_DIR
     output_dir.mkdir(exist_ok=True)
-    out = output_dir / "strategy_comparison.html"
+    out = output_dir / "strategy_comparison.pdf"
     compare_strategies(results, output_path=str(out))
     logger.info("Comparison report saved to %s", out.resolve())
 

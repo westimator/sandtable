@@ -155,6 +155,17 @@ def generate_tearsheet(result: BacktestResult, output_path: str | None = None) -
 """
 
     if output_path:
-        Path(output_path).write_text(html)
+        path = Path(output_path)
+        if path.suffix.lower() == ".pdf":
+            _write_pdf(html, path)
+        else:
+            path.write_text(html)
 
     return html
+
+
+def _write_pdf(html: str, path: Path) -> None:
+    """Convert HTML tearsheet to PDF via weasyprint."""
+    from weasyprint import HTML
+
+    HTML(string=html).write_pdf(str(path))
