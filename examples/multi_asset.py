@@ -30,6 +30,7 @@ logger = get_logger(__name__)
 SYMBOLS = ["AAPL", "MSFT", "GOOGL"]
 START = "2023-01-01"
 END = "2024-12-31"
+OUTPUT_FILENAME = "multi_asset_ma_crossover_tearsheet.pdf"
 
 
 def main() -> None:
@@ -81,7 +82,7 @@ def main() -> None:
     # Generate tearsheet
     output_dir = settings.BACKTESTER_OUTPUT_DIR
     output_dir.mkdir(exist_ok=True)
-    out = output_dir / "multi_asset_tearsheet.pdf"
+    out = output_dir / OUTPUT_FILENAME
     result.tearsheet(output_path=str(out))
     logger.info("Tearsheet saved to %s", out.resolve())
 

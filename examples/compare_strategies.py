@@ -4,7 +4,7 @@ examples/compare_strategies.py
 Example: Compare multiple strategy configurations side by side.
 
 Runs the same MA crossover strategy with different parameter sets,
-then generates an HTML report with overlaid equity curves and a
+then generates a PDF report with overlaid equity curves and a
 metrics comparison table.
 
 Usage:
@@ -28,6 +28,8 @@ from sandtable import (
 logger = get_logger(__name__)
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
+OUTPUT_FILENAME = "ma_crossover_comparison.pdf"
 
 CONFIGS = {
     "Fast (5-day / 15-day MA)": {"fast_period": 5, "slow_period": 15},
@@ -75,7 +77,7 @@ def main() -> None:
     ## Generate comparison report
     output_dir = settings.BACKTESTER_OUTPUT_DIR
     output_dir.mkdir(exist_ok=True)
-    out = output_dir / "strategy_comparison.pdf"
+    out = output_dir / OUTPUT_FILENAME
     compare_strategies(results, output_path=str(out))
     logger.info("Comparison report saved to %s", out.resolve())
 

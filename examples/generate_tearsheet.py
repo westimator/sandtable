@@ -21,6 +21,8 @@ from sandtable import (
 
 logger = get_logger(__name__)
 
+OUTPUT_FILENAME = "spy_ma_crossover_tearsheet.pdf"
+
 
 def main() -> None:
     ## 1. Run backtest
@@ -39,7 +41,7 @@ def main() -> None:
     ## 2. Generate tearsheet
     output_dir = settings.BACKTESTER_OUTPUT_DIR
     output_dir.mkdir(exist_ok=True)
-    out = output_dir / "tearsheet.pdf"
+    out = output_dir / OUTPUT_FILENAME
     result.tearsheet(output_path=str(out))
     logger.info("Tearsheet written to %s", out.resolve())
 
