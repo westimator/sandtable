@@ -2,7 +2,7 @@
 
 [project]
 name = "sandtable"
-version = "0.1.0"
+version = "0.1.1"
 description = "Event-driven backtesting framework with realistic execution modeling"
 readme = "README.md"
 requires-python = ">=3.12.1,<3.13"
