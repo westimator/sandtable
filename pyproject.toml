@@ -41,7 +41,7 @@ packages = ["src/sandtable"]
 
 [tool.ruff]
 line-length = 125
-target-version = "py312"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
