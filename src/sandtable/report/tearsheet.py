@@ -18,13 +18,22 @@ if TYPE_CHECKING:
     from sandtable.core.result import BacktestResult
 
 
-def generate_tearsheet(result: BacktestResult, output_path: str | None = None) -> str:
+def generate_tearsheet(
+    result: BacktestResult,
+    output_path: str | None = None,
+    include_stats: bool = False,
+    n_simulations: int = 1_000,
+    random_seed: int | None = None,
+) -> str:
     """
     Generate a self-contained HTML tearsheet with embedded matplotlib charts.
 
     Args:
         result: BacktestResult to visualize
         output_path: If provided, write HTML to this file
+        include_stats: If True, run significance tests and append results
+        n_simulations: Number of simulations for significance tests
+        random_seed: Optional seed for significance test reproducibility
 
     Returns:
         HTML string
@@ -122,6 +131,46 @@ def generate_tearsheet(result: BacktestResult, output_path: str | None = None) -
             index=False, classes="trade-table", float_format="%.4f"
         )
 
+    # Build statistical significance table
+    stats_table = ""
+    if include_stats:
+        from sandtable.stats.significance import run_significance_tests
+
+        sig_results = run_significance_tests(
+            result,
+            n_simulations=n_simulations,
+            random_seed=random_seed,
+        )
+        stats_rows = ""
+        for key in ("permutation", "t_test", "bootstrap"):
+            sr = sig_results[key]
+            sig_text = "Yes" if sr.is_significant else "No"
+            z_text = f"{sr.z_score:.2f}" if sr.null_std > 0 else "--"
+            stats_rows += (
+                f"<tr>"
+                f"<td style='text-align:left'>{sr.test_name}</td>"
+                f"<td>{sr.observed_statistic:.4f}</td>"
+                f"<td>{sr.p_value:.4f}</td>"
+                f"<td>{sig_text}</td>"
+                f"<td>{z_text}</td>"
+                f"</tr>\n"
+            )
+        stats_table = (
+            '<div class="bt-stats">\n'
+            "<h3>Statistical Significance</h3>\n"
+            '<table class="stats-table">\n'
+            "<thead><tr>"
+            "<th style='text-align:left'>Test</th>"
+            "<th>Statistic</th>"
+            "<th>p-value</th>"
+            "<th>Significant?</th>"
+            "<th>Z-score</th>"
+            "</tr></thead>\n"
+            f"<tbody>{stats_rows}</tbody>\n"
+            "</table>\n"
+            "</div>"
+        )
+
     title = f"Backtest Tearsheet: {symbols_str} | {start_date} - {end_date}"
     html = f"""<!DOCTYPE html>
 <html>
@@ -142,6 +191,11 @@ def generate_tearsheet(result: BacktestResult, output_path: str | None = None) -
   .bt-tearsheet .trade-table td {{ padding: 5px 10px; border-bottom: 1px solid #eee; color: #222; text-align: center; }}
   .bt-tearsheet .trade-table td:first-child {{ text-align: left; }}
   .bt-tearsheet .trade-table tr:nth-child(even) {{ background: #f5f5f5; }}
+  .bt-tearsheet .bt-stats {{ margin-top: 20px; }}
+  .bt-tearsheet .stats-table {{ width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }}
+  .bt-tearsheet .stats-table th {{ background: #37474F; color: white; padding: 6px 10px; text-align: center; }}
+  .bt-tearsheet .stats-table td {{ padding: 5px 10px; border-bottom: 1px solid #eee; color: #222; text-align: center; }}
+  .bt-tearsheet .stats-table tr:nth-child(even) {{ background: #f5f5f5; }}
 </style>
 </head>
 <body>
@@ -149,6 +203,7 @@ def generate_tearsheet(result: BacktestResult, output_path: str | None = None) -
 <div class="metrics">{metrics_text}</div>
 <img src="data:image/png;base64,{img_b64}" alt="Tearsheet Charts">
 {trade_table}
+{stats_table}
 </div>
 </body>
 </html>

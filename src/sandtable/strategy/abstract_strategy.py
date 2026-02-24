@@ -8,7 +8,6 @@ Strategies receive market data events and generate trading signals.
 
 from abc import ABC, abstractmethod
 from collections import deque
-from dataclasses import dataclass, field
 
 from sandtable.core.events import MarketDataEvent, SignalEvent
 from sandtable.utils.logger import get_logger
@@ -16,7 +15,6 @@ from sandtable.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-@dataclass
 class AbstractStrategy(ABC):
     """
     Abstract base class for trading strategies.
@@ -31,15 +29,19 @@ class AbstractStrategy(ABC):
         max_history: Maximum number of bars to keep in history
     """
 
-    max_history: int = 500
+    ## Magic methods
 
-    _bar_history: deque[MarketDataEvent] = field(init=False)
+    def __init__(self, *, max_history: int = 500) -> None:
+        """
+        Initialize the strategy.
 
-    def __post_init__(self) -> None:
+        Args:
+            max_history: Maximum number of bars to keep in history
         """
-        Initialize bar history.
-        """
-        self._bar_history = deque(maxlen=self.max_history)
+        self.max_history = max_history
+        self._bar_history: deque[MarketDataEvent] = deque(maxlen=max_history)
+
+    ## Properties
 
     @property
     def bar_count(self) -> int:
@@ -55,30 +57,12 @@ class AbstractStrategy(ABC):
         """
         return list(self._bar_history)
 
-    def on_bar(self, bar: MarketDataEvent) -> SignalEvent | None:
-        """Process a new market data bar.
-
-        Stores the bar in history and calls generate_signal().
-
-        Args:
-            bar: The new market data event
-
-        Returns:
-            A SignalEvent if the strategy wants to trade, None otherwise.
-        """
-        self._bar_history.append(bar)
-        logger.debug(
-            "Strategy received bar %d: %s %s close=$%.2f",
-            self.bar_count,
-            bar.symbol,
-            bar.timestamp.date(),
-            bar.close,
-        )
-        return self.generate_signal(bar)
+    ## Abstract methods
 
     @abstractmethod
     def generate_signal(self, bar: MarketDataEvent) -> SignalEvent | None:
-        """Generate a trading signal based on current market state.
+        """
+        Generate a trading signal based on current market state.
 
         Called by on_bar() after the new bar is added to history.
         Subclasses implement their trading logic here.
@@ -91,12 +75,36 @@ class AbstractStrategy(ABC):
         """
         pass
 
+    ## Public API
+
+    def on_bar(self, bar: MarketDataEvent) -> SignalEvent | None:
+        """
+        Process a new market data bar.
+
+        Stores the bar in history and calls generate_signal().
+
+        Args:
+            bar: The new market data event
+
+        Returns:
+            A SignalEvent if the strategy wants to trade, None otherwise.
+        """
+        self._bar_history.append(bar)
+        logger.debug(
+            "Strategy received bar %d: %s %s close=$%.2f",
+            self.bar_count, bar.symbol, bar.timestamp.date(), bar.close,
+        )
+        return self.generate_signal(bar)
+
     def symbol_bar_count(self, symbol: str) -> int:
         """Number of bars in history for a specific symbol."""
-        return sum(1 for b in self._bar_history if b.symbol == symbol)
+        return sum(
+            1 for b in self._bar_history if b.symbol == symbol
+        )
 
     def get_historical_closes(self, n: int, symbol: str | None = None) -> list[float]:
-        """Get the n most recent closing prices.
+        """
+        Get the n most recent closing prices.
 
         Args:
             n: Number of closes to retrieve

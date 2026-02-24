@@ -7,8 +7,11 @@ Handles position sizing, fill processing, and equity curve recording.
 Supports both long and short positions with correct P&L accounting.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sandtable.core.events import (
     Direction,
@@ -19,6 +22,9 @@ from sandtable.core.events import (
     SignalEvent,
 )
 from sandtable.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from sandtable.data.universe import Universe
 
 logger = get_logger(__name__)
 
@@ -34,7 +40,6 @@ class Position:
         avg_cost: Average cost basis per share
         realized_pnl: Cumulative realized P&L from closed trades
     """
-
     symbol: str
     quantity: int = 0
     avg_cost: float = 0.0
@@ -94,7 +99,6 @@ class EquityPoint:
         cash: Cash balance
         positions_value: Total market value of all positions
     """
-
     timestamp: datetime
     equity: float
     cash: float
@@ -110,17 +114,29 @@ class Portfolio:
         initial_capital: Starting cash amount
         position_size_pct: Fraction of equity to allocate per trade (default 10%)
     """
-
     initial_capital: float = 100_000.0
     position_size_pct: float = 0.10
+    universe: Universe | None = None
 
     _cash: float = field(init=False)
-    _positions: dict[str, Position] = field(init=False, default_factory=dict)
-    _current_prices: dict[str, float] = field(init=False, default_factory=dict)
-    _equity_curve: list[EquityPoint] = field(init=False, default_factory=list)
-    _trades: list[FillEvent] = field(init=False, default_factory=list)
+    _positions: dict[str, Position] = field(
+        init=False,
+        default_factory=dict,
+    )
+    _current_prices: dict[str, float] = field(
+        init=False,
+        default_factory=dict,
+    )
+    _equity_curve: list[EquityPoint] = field(
+        init=False,
+        default_factory=list,
+    )
+    _trades: list[FillEvent] = field(
+        init=False,
+        default_factory=list,
+    )
 
-    ## Magic methods
+    ## magic methods
 
     def __post_init__(self) -> None:
         """
@@ -140,7 +156,7 @@ class Portfolio:
             f"positions={len(self._positions)})"
         )
 
-    ## Properties
+    ## properties
 
     @property
     def cash(self) -> float:
@@ -170,42 +186,64 @@ class Portfolio:
         """
         return list(self._trades)
 
-    ## Private methods
+    ## private methods
+
+    def _multiplier(self, symbol: str) -> float:
+        """Return contract_multiplier for a symbol (1.0 if no universe or equity)."""
+        if self.universe is None:
+            return 1.0
+        try:
+            return self.universe.get_instrument(symbol).contract_multiplier
+        except KeyError:
+            return 1.0
 
     def _process_buy(self, pos: Position, fill: FillEvent, trade_value: float) -> None:
         """
         Process a buy order (LONG direction).
+
+        Three cases:
+        1. Flat or already long; increase position, update weighted-average cost.
+        2. Short and partially covering; realize P&L on covered shares,
+           reduce the short.
+        3. Short and flipping to long; realize P&L on all short shares,
+           open a new long at the fill price.
+
+        Cash always decreases by trade_value + commission.
+
+        Args:
+            pos: Existing position object (mutated in place)
+            fill: The fill event with price, quantity, and commission
+            trade_value: quantity * fill_price * contract_multiplier
         """
-        # Cash decreases
+        # cash decreases
         self._cash -= trade_value + fill.commission
 
         if pos.quantity >= 0:
-            # Adding to long or opening new long
+            # adding to long or opening new long
             new_quantity = pos.quantity + fill.quantity
             if new_quantity > 0:
-                # Update average cost
+                # update average cost
                 old_value = pos.quantity * pos.avg_cost
                 new_value = old_value + trade_value
                 pos.avg_cost = new_value / new_quantity
             pos.quantity = new_quantity
         else:
-            # Covering short position
+            # covering short position
             shares_to_cover = min(fill.quantity, abs(pos.quantity))
 
-            # Realize P&L on covered shares
+            # realize P&L on covered shares
             realized = (pos.avg_cost - fill.fill_price) * shares_to_cover
             pos.realized_pnl += realized
 
             logger.debug(
                 "Covering %d short shares, realized P&L: $%.2f",
-                shares_to_cover,
-                realized,
+                shares_to_cover,realized,
             )
 
             pos.quantity += fill.quantity
 
             if pos.quantity > 0:
-                # Flipped to long
+                # flipped to long
                 pos.avg_cost = fill.fill_price
             elif pos.quantity == 0:
                 pos.avg_cost = 0.0
@@ -214,23 +252,23 @@ class Portfolio:
         """
         Process a sell order (SHORT direction).
         """
-        # Cash increases
+        # cash increases
         self._cash += trade_value - fill.commission
 
         if pos.quantity <= 0:
-            # Adding to short or opening new short
+            # adding to short or opening new short
             new_quantity = pos.quantity - fill.quantity
             if new_quantity < 0:
-                # Update average cost for short
+                # update average cost for short
                 old_value = abs(pos.quantity) * pos.avg_cost
                 new_value = old_value + trade_value
                 pos.avg_cost = new_value / abs(new_quantity)
             pos.quantity = new_quantity
         else:
-            # Closing long position
+            # closing long position
             shares_to_close = min(fill.quantity, pos.quantity)
 
-            # Realize P&L on closed shares
+            # realize P&L on closed shares
             realized = (fill.fill_price - pos.avg_cost) * shares_to_close
             pos.realized_pnl += realized
 
@@ -243,12 +281,12 @@ class Portfolio:
             pos.quantity -= fill.quantity
 
             if pos.quantity < 0:
-                # Flipped to short
+                # flipped to short
                 pos.avg_cost = fill.fill_price
             elif pos.quantity == 0:
                 pos.avg_cost = 0.0
 
-    ## Public methods
+    ## public methods
 
     def get_position(self, symbol: str) -> Position:
         """
@@ -266,7 +304,7 @@ class Portfolio:
         total = 0.0
         for symbol, pos in self._positions.items():
             if symbol in self._current_prices:
-                total += pos.market_value(self._current_prices[symbol])
+                total += pos.market_value(self._current_prices[symbol]) * self._multiplier(symbol)
         return total
 
     def equity(self) -> float:
@@ -274,6 +312,35 @@ class Portfolio:
         Calculate total portfolio equity (cash + positions).
         """
         return self._cash + self.positions_value()
+
+    def gross_exposure(self) -> float:
+        """
+        Sum of absolute market values of all positions.
+        """
+        total = 0.0
+        for symbol, pos in self._positions.items():
+            price = self._current_prices.get(symbol, 0.0)
+            total += abs(pos.market_value(price) * self._multiplier(symbol))
+        return total
+
+    def net_exposure(self) -> float:
+        """
+        Signed sum of market values (longs positive, shorts negative).
+        """
+        total = 0.0
+        for symbol, pos in self._positions.items():
+            price = self._current_prices.get(symbol, 0.0)
+            total += pos.market_value(price) * self._multiplier(symbol)
+        return total
+
+    def leverage(self) -> float:
+        """
+        Gross exposure divided by total equity. Returns inf if equity <= 0.
+        """
+        eq = self.equity()
+        if eq <= 0:
+            return float("inf")
+        return self.gross_exposure() / eq
 
     def update_price(self, symbol: str, price: float) -> None:
         """
@@ -286,7 +353,10 @@ class Portfolio:
         """
         Process market data event to update prices.
         """
-        self.update_price(event.symbol, event.close)
+        self.update_price(
+            symbol=event.symbol,
+            price=event.close,
+        )
 
     def on_fill(self, fill: FillEvent) -> None:
         """
@@ -304,13 +374,13 @@ class Portfolio:
         """
         self._trades.append(fill)
         pos = self.get_position(fill.symbol)
-        trade_value = fill.quantity * fill.fill_price
+        trade_value = fill.quantity * fill.fill_price * self._multiplier(fill.symbol)
 
         if fill.direction == Direction.LONG:
-            # Buying shares
+            # buying shares
             self._process_buy(pos, fill, trade_value)
         else:
-            # Selling shares
+            # selling shares
             self._process_sell(pos, fill, trade_value)
 
         logger.debug(
@@ -343,10 +413,10 @@ class Portfolio:
         pos = self.get_position(signal.symbol)
         current_equity = self.equity()
 
-        # Calculate target position value
+        # calculate target position value
         target_value = current_equity * self.position_size_pct * signal.strength
 
-        # Calculate target quantity
+        # calculate target quantity
         if current_price <= 0:
             logger.warning("Invalid price $%.2f for %s", current_price, signal.symbol)
             return None
@@ -357,13 +427,13 @@ class Portfolio:
             logger.debug("Target quantity is 0, skipping order")
             return None
 
-        # Determine order direction and quantity based on signal and current position
+        # determine order direction and quantity based on signal and current position
         if signal.direction == Direction.LONG:
             if pos.quantity < 0:
-                # Close short first, then go long
+                # close short first, then go long
                 order_quantity = abs(pos.quantity) + target_quantity
             elif pos.quantity >= target_quantity:
-                # Already have enough long exposure
+                # already have enough long exposure
                 logger.debug("Already have sufficient long position")
                 return None
             else:
@@ -371,10 +441,10 @@ class Portfolio:
             order_direction = Direction.LONG
         else:  # SHORT signal
             if pos.quantity > 0:
-                # Close long first, then go short
+                # close long first, then go short
                 order_quantity = pos.quantity + target_quantity
             elif abs(pos.quantity) >= target_quantity:
-                # Already have enough short exposure
+                # already have enough short exposure
                 logger.debug("Already have sufficient short position")
                 return None
             else:
@@ -416,9 +486,7 @@ class Portfolio:
         self._equity_curve.append(point)
         logger.debug(
             "Equity recorded: $%.2f (cash=$%.2f, positions=$%.2f)",
-            point.equity,
-            point.cash,
-            point.positions_value,
+            point.equity, point.cash, point.positions_value,
         )
 
     def reset(self) -> None:
@@ -436,7 +504,9 @@ class Portfolio:
         """
         Calculate total realized P&L across all positions.
         """
-        return sum(pos.realized_pnl for pos in self._positions.values())
+        return sum(
+            pos.realized_pnl for pos in self._positions.values()
+        )
 
     def total_unrealized_pnl(self) -> float:
         """
@@ -445,5 +515,7 @@ class Portfolio:
         total = 0.0
         for symbol, pos in self._positions.items():
             if symbol in self._current_prices:
-                total += pos.unrealized_pnl(self._current_prices[symbol])
+                total += pos.unrealized_pnl(
+                    current_price=self._current_prices[symbol],
+                )
         return total

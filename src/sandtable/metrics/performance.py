@@ -125,19 +125,19 @@ def calculate_metrics(
     equities = [point.equity for point in equity_curve]
     start_equity = equities[0]
     end_equity = equities[-1]
-    num_days = len(equity_curve)
+    num_days = len(equity_curve) - 1  # intervals, not points
 
     # calculate returns
     total_return = (end_equity - start_equity) / start_equity
-    cagr = _calculate_cagr(start_equity, end_equity, num_days)
+    cagr = calculate_cagr(start_equity, end_equity, num_days)
 
     # calculate daily returns for risk metrics
     daily_returns = _calculate_daily_returns(equities)
 
     # risk metrics
-    sharpe_ratio = _calculate_sharpe_ratio(daily_returns, risk_free_rate)
-    sortino_ratio = _calculate_sortino_ratio(daily_returns, risk_free_rate)
-    max_drawdown = _calculate_max_drawdown(equities)
+    sharpe_ratio = calculate_sharpe_ratio(daily_returns, risk_free_rate)
+    sortino_ratio = calculate_sortino_ratio(daily_returns, risk_free_rate)
+    max_drawdown = calculate_max_drawdown(equities)
 
     # trade metrics
     trade_metrics = _calculate_trade_metrics(trades)
@@ -195,7 +195,7 @@ def _calculate_daily_returns(equities: list[float]) -> list[float]:
     return returns
 
 
-def _calculate_cagr(
+def calculate_cagr(
     start_equity: float,
     end_equity: float,
     num_days: int,
@@ -218,7 +218,7 @@ def _calculate_cagr(
     return (end_equity / start_equity) ** (1 / years) - 1
 
 
-def _calculate_sharpe_ratio(
+def calculate_sharpe_ratio(
     daily_returns: list[float],
     risk_free_rate: float = 0.0,
 ) -> float:
@@ -247,7 +247,7 @@ def _calculate_sharpe_ratio(
     return sharpe
 
 
-def _calculate_sortino_ratio(
+def calculate_sortino_ratio(
     daily_returns: list[float],
     risk_free_rate: float = 0.0,
 ) -> float:
@@ -264,16 +264,15 @@ def _calculate_sortino_ratio(
     mean_return = sum(daily_returns) / len(daily_returns)
     daily_rf = risk_free_rate / TRADING_DAYS_PER_YEAR
 
-    # calculate downside deviation (only negative returns)
-    negative_returns = [r for r in daily_returns if r < 0]
+    # calculate downside deviation using all returns below target
+    downside_diffs = [min(r - daily_rf, 0) for r in daily_returns]
 
-    if len(negative_returns) < 2:
+    if all(d == 0 for d in downside_diffs):
         # no downside volatility; return high value if positive returns
         return 10.0 if mean_return > daily_rf else 0.0
 
-    downside_variance = sum(r**2 for r in negative_returns) / (
-        len(negative_returns) - 1
-    )
+    n = len(daily_returns)
+    downside_variance = sum(d**2 for d in downside_diffs) / n
     downside_std = math.sqrt(downside_variance) if downside_variance > 0 else 0.0
 
     if downside_std == 0:
@@ -284,7 +283,7 @@ def _calculate_sortino_ratio(
     return sortino
 
 
-def _calculate_max_drawdown(equities: list[float]) -> float:
+def calculate_max_drawdown(equities: list[float]) -> float:
     """
     Calculate maximum drawdown (peak-to-trough decline).
 
@@ -387,8 +386,10 @@ def _extract_round_trips(trades: list[FillEvent]) -> list[dict]:
                     close_qty = min(remaining_qty, open_pos["quantity"])
 
                     # p&l for covering short: (entry_price - exit_price) * qty - costs
+                    entry_comm = open_pos["commission"] * (close_qty / open_pos["quantity"])
                     pnl = (open_pos["price"] - fill.fill_price) * close_qty
                     pnl -= fill.commission * (close_qty / fill.quantity)
+                    pnl -= entry_comm
 
                     round_trips.append(
                         {
@@ -400,6 +401,7 @@ def _extract_round_trips(trades: list[FillEvent]) -> list[dict]:
                         }
                     )
 
+                    open_pos["commission"] -= entry_comm
                     open_pos["quantity"] -= close_qty
                     remaining_qty -= close_qty
 
@@ -430,8 +432,10 @@ def _extract_round_trips(trades: list[FillEvent]) -> list[dict]:
                     close_qty = min(remaining_qty, open_pos["quantity"])
 
                     # p&l for closing long: (exit_price - entry_price) * qty - costs
+                    entry_comm = open_pos["commission"] * (close_qty / open_pos["quantity"])
                     pnl = (fill.fill_price - open_pos["price"]) * close_qty
                     pnl -= fill.commission * (close_qty / fill.quantity)
+                    pnl -= entry_comm
 
                     round_trips.append(
                         {
@@ -443,6 +447,7 @@ def _extract_round_trips(trades: list[FillEvent]) -> list[dict]:
                         }
                     )
 
+                    open_pos["commission"] -= entry_comm
                     open_pos["quantity"] -= close_qty
                     remaining_qty -= close_qty
 

@@ -102,6 +102,33 @@ class BacktestResult:
             **kwargs,
         )
 
+    def significance_tests(
+        self,
+        n_simulations: int = 1000,
+        significance_level: float = 0.05,
+        random_seed: int | None = None,
+    ) -> dict:
+        """
+        Run statistical significance tests on this backtest's returns.
+
+        Args:
+            n_simulations: Number of simulations for permutation/bootstrap
+            significance_level: Alpha threshold (default 0.05)
+            random_seed: Optional seed for reproducibility
+
+        Returns:
+            Dict with keys "permutation", "t_test", "bootstrap" mapping
+            to SignificanceResult objects.
+        """
+        from sandtable.stats.significance import run_significance_tests
+
+        return run_significance_tests(
+            self,
+            n_simulations=n_simulations,
+            significance_level=significance_level,
+            random_seed=random_seed,
+        )
+
     def tearsheet(self, output_path: str | None = None) -> str:
         """Generate an HTML tearsheet report."""
         return generate_tearsheet(self, output_path=output_path)

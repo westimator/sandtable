@@ -18,5 +18,14 @@ build/
 .vscode/
 .idea/
 
+# Streamlit
+.streamlit/
+
+# Data cache (downloaded market data)
+data/cache/
+
 # Generated outputs
-outputs/
+output/
+
+# SQLite database
+sandtable.db

@@ -7,12 +7,18 @@ Combines slippage models, market impact models, and commission calculations
 to produce realistic fill events.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from sandtable.core.events import Direction, FillEvent, MarketDataEvent, OrderEvent
 from sandtable.execution.impact import MarketImpactModel, NoMarketImpact
 from sandtable.execution.slippage import SlippageModel, ZeroSlippage
 from sandtable.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from sandtable.data.instrument import Instrument
 
 logger = get_logger(__name__)
 
@@ -63,6 +69,7 @@ class ExecutionSimulator:
         self,
         order: OrderEvent,
         bar: MarketDataEvent,
+        instrument: Instrument | None = None,
     ) -> FillEvent:
         """
         Process an order and return a fill event.
@@ -70,26 +77,39 @@ class ExecutionSimulator:
         Args:
             order: The order to execute
             bar: Current market data bar for price/volume info
+            instrument: Optional instrument for tick/lot size rounding
 
         Returns:
             FillEvent with execution details
         """
-        # Base price is the close (for market orders)
+        # round order quantity to lot size if instrument provided
+        quantity = order.quantity
+        if instrument is not None and instrument.lot_size > 1:
+            quantity = max(
+                instrument.lot_size,
+                (quantity // instrument.lot_size) * instrument.lot_size
+            )
+
+        # base price is the close (for market orders)
         base_price = bar.close
 
-        # Calculate slippage and impact (both positive values)
+        # calculate slippage and impact (both positive values)
         slippage_amount = self.slippage_model.calculate_slippage(order, bar, base_price)
         impact_amount = self.impact_model.calculate_impact(order, bar, base_price)
 
-        # Apply costs adversely based on direction
+        # apply costs adversely based on direction
         if order.direction == Direction.LONG:
-            # Buying: pay more (add slippage and impact)
+            # buying: pay more (add slippage and impact)
             fill_price = base_price + slippage_amount + impact_amount
         else:
-            # Selling: receive less (subtract slippage and impact)
+            # selling: receive less (subtract slippage and impact)
             fill_price = base_price - slippage_amount - impact_amount
 
-        # Clamp fill price to bar's [low, high] range
+        # round fill price to tick size if instrument provided
+        if instrument is not None and instrument.tick_size > 0:
+            fill_price = round(fill_price / instrument.tick_size) * instrument.tick_size
+
+        # clamp fill price to bar's [low, high] range
         original_fill_price = fill_price
         fill_price = max(bar.low, min(bar.high, fill_price))
 
@@ -102,15 +122,15 @@ class ExecutionSimulator:
                 bar.high,
             )
 
-        # Calculate commission
-        commission = self._calculate_commission(order.quantity, fill_price)
+        # calculate commission
+        commission = self._calculate_commission(quantity, fill_price)
 
-        # Create fill event
+        # create fill event
         fill = FillEvent(
             timestamp=order.timestamp,
             symbol=order.symbol,
             direction=order.direction,
-            quantity=order.quantity,
+            quantity=quantity,
             fill_price=fill_price,
             commission=commission,
             slippage=slippage_amount,
@@ -120,7 +140,7 @@ class ExecutionSimulator:
         logger.debug(
             "Fill: %s %d %s @ $%.2f (slip=$%.4f, impact=$%.4f, comm=$%.2f)",
             order.direction.name,
-            order.quantity,
+            quantity,
             order.symbol,
             fill_price,
             slippage_amount,
@@ -146,13 +166,13 @@ class ExecutionSimulator:
         """
         trade_value = quantity * fill_price
 
-        # Per-share commission
+        # per-share commission
         per_share_comm = quantity * self.config.commission_per_share
 
-        # Percentage commission
+        # percentage commission
         pct_comm = trade_value * self.config.commission_pct
 
-        # Total with minimum
+        # total with minimum
         total_commission = max(
             per_share_comm + pct_comm,
             self.config.commission_minimum,

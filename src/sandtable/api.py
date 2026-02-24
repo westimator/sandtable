@@ -11,32 +11,39 @@ from __future__ import annotations
 
 import itertools
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import pandas as pd
 
 from sandtable.core.backtest import Backtest
 from sandtable.core.result import BacktestResult
-from sandtable.data_handlers.abstract_data_handler import AbstractDataHandler
+from sandtable.data_engine.handler import DataHandler
+from sandtable.data_types.metric import Metric
 from sandtable.execution.impact import MarketImpactModel
 from sandtable.execution.simulator import ExecutionConfig, ExecutionSimulator
 from sandtable.execution.slippage import SlippageModel
-from sandtable.metrics import Metric
 from sandtable.portfolio.portfolio import Portfolio
+from sandtable.risk.abstract_risk_manager import AbstractRiskManager
 from sandtable.strategy.abstract_strategy import AbstractStrategy
 from sandtable.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from sandtable.persistence.abstract_store import AbstractResultStore
 
 logger = get_logger(__name__)
 
 
 def run_backtest(
     strategy: AbstractStrategy,
-    data: AbstractDataHandler,
+    data: DataHandler,
     initial_capital: float = 100_000.0,
     position_size_pct: float = 0.10,
     slippage: SlippageModel | None = None,
     impact: MarketImpactModel | None = None,
     commission: float | ExecutionConfig | None = None,
+    risk_manager: AbstractRiskManager | None = None,
+    result_store: AbstractResultStore | None = None,
+    result_tags: dict[str, str] | None = None,
 ) -> BacktestResult:
     """
     Run a backtest with minimal boilerplate.
@@ -49,6 +56,7 @@ def run_backtest(
         slippage: Optional slippage model
         impact: Optional market impact model
         commission: Per-share commission float or ExecutionConfig
+        risk_manager: Optional risk manager to filter orders
 
     Returns:
         BacktestResult with all outputs
@@ -56,29 +64,37 @@ def run_backtest(
     price_data = data.get_price_data()
     symbols_list = sorted(price_data.keys())
 
-    logger.info("Running backtest: %s on %s", type(strategy).__name__, symbols_list)
+    logger.info(
+        "Running backtest: %s on %s",
+        type(strategy).__name__, symbols_list,
+    )
 
-    # Build execution simulator
+    # build execution simulator
     executor = _build_executor(slippage, impact, commission)
 
-    # Build portfolio
-    portfolio = Portfolio(initial_capital=initial_capital, position_size_pct=position_size_pct)
+    # build portfolio with universe for contract multiplier support
+    portfolio = Portfolio(
+        initial_capital=initial_capital,
+        position_size_pct=position_size_pct,
+        universe=data.universe,
+    )
 
-    # Run backtest
+    # run backtest
     backtest = Backtest(
         data_handler=data,
         strategy=strategy,
         portfolio=portfolio,
         executor=executor,
+        risk_manager=risk_manager,
     )
     metrics = backtest.run()
 
-    # Determine date range from equity curve
+    # determine date range from equity curve
     eq = portfolio.equity_curve
     start_date = eq[0].timestamp if eq else None
     end_date = eq[-1].timestamp if eq else None
 
-    # Build parameters dict
+    # build parameters dict
     parameters = {
         "strategy": type(strategy).__name__,
         "symbols": symbols_list,
@@ -86,9 +102,12 @@ def run_backtest(
         "position_size_pct": position_size_pct,
     }
 
-    logger.info("Backtest finished: return=%.2f%%, sharpe=%.2f", metrics.total_return * 100, metrics.sharpe_ratio)
+    logger.info(
+        "Backtest finished: return=%.2f%%, sharpe=%.2f",
+        metrics.total_return * 100, metrics.sharpe_ratio,
+    )
 
-    return BacktestResult(
+    bt_result = BacktestResult(
         metrics=metrics,
         equity_curve=portfolio.equity_curve,
         trades=portfolio.trades,
@@ -99,6 +118,24 @@ def run_backtest(
         start_date=start_date,
         end_date=end_date,
     )
+
+    if result_store is not None:
+        from sandtable.config import BacktestConfig
+
+        config = BacktestConfig(
+            strategy_cls=type(strategy),
+            strategy_params={},
+            universe=symbols_list,
+            initial_capital=initial_capital,
+            position_size_pct=position_size_pct,
+        )
+        result_store.save_run(
+            config=config,
+            result=bt_result,
+            tags=result_tags,
+        )
+
+    return bt_result
 
 
 def _build_executor(
@@ -124,7 +161,18 @@ def _build_executor(
 
 @dataclass
 class SweepResult:
-    """Container for parameter sweep results."""
+    """
+    Container for parameter sweep results.
+
+    Attributes:
+        results: List of BacktestResult objects, one per parameter combination
+        param_combinations: List of dicts mapping parameter names to values,
+            aligned with results by index
+        metric: The metric used to determine the best result (default SHARPE_RATIO)
+    """
+
+    # metrics where lower values are better
+    _MINIMIZE_METRICS: ClassVar[frozenset[Metric]] = frozenset({Metric.MAX_DRAWDOWN})
 
     results: list[BacktestResult]
     param_combinations: list[dict[str, Any]]
@@ -140,8 +188,22 @@ class SweepResult:
         return self.results[self._best_index()]
 
     def _best_index(self) -> int:
-        values = [getattr(r.metrics, self.metric) for r in self.results]
-        return max(range(len(values)), key=lambda i: values[i])
+        """
+        Return the index of the best result according to self.metric.
+
+        Maximizes for most metrics, but minimizes for metrics in
+        _MINIMIZE_METRICS (e.g. MAX_DRAWDOWN where lower is better).
+        """
+        values: list[float] = [getattr(r.metrics, self.metric) for r in self.results]
+        if self.metric in self._MINIMIZE_METRICS:
+            return min(
+                range(len(values)),
+                key=lambda i: values[i]
+            )
+        return max(
+            range(len(values)),
+            key=lambda i: values[i]
+        )
 
     def to_dataframe(self) -> pd.DataFrame:
         rows = []
@@ -169,8 +231,9 @@ class SweepResult:
 def run_parameter_sweep(
     strategy_class: type[AbstractStrategy],
     param_grid: dict[str, list[Any]],
-    data: AbstractDataHandler,
+    data: DataHandler,
     metric: Metric = Metric.SHARPE_RATIO,
+    result_store: AbstractResultStore | None = None,
     **backtest_kwargs: Any,
 ) -> SweepResult:
     """
@@ -206,11 +269,15 @@ def run_parameter_sweep(
         result = run_backtest(
             strategy=strategy,
             data=data,
+            result_store=result_store,
             **backtest_kwargs,
         )
         results.append(result)
 
-        logger.debug("Sweep: %s -> %s=%.4f", params, metric, getattr(result.metrics, metric))
+        logger.debug(
+            "Sweep: %s -> %s=%.4f",
+            params, metric, getattr(result.metrics, metric),
+        )
 
     return SweepResult(
         results=results,

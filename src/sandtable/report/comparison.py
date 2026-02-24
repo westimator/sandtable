@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 
-from sandtable.metrics import Metric
+from sandtable.data_types.metric import Metric
 
 if TYPE_CHECKING:
     from sandtable.core.result import BacktestResult
@@ -67,7 +67,7 @@ def compare_strategies(
     ]
     strategy_names = list(results.keys())
 
-    PCT_METRICS = {Metric.TOTAL_RETURN, Metric.CAGR, Metric.MAX_DRAWDOWN}
+    SIGNED_PCT_METRICS = {Metric.TOTAL_RETURN, Metric.CAGR}
 
     header = "<tr><th>Metric</th>" + "".join(f"<th>{n}</th>" for n in strategy_names) + "</tr>"
     rows = []
@@ -76,7 +76,9 @@ def compare_strategies(
         for name in strategy_names:
             m = results[name].metrics
             val = getattr(m, metric)
-            if metric in PCT_METRICS:
+            if metric == Metric.MAX_DRAWDOWN:
+                cells += f"<td>{-val:.2%}</td>"
+            elif metric in SIGNED_PCT_METRICS:
                 cells += f"<td>{val:+.2%}</td>"
             elif metric == Metric.WIN_RATE:
                 cells += f"<td>{val:.1%}</td>"

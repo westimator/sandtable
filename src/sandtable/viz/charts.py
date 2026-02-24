@@ -50,7 +50,8 @@ def plot_backtest_results(
 
     # Panel 1: Price with trade markers
     ax1 = axes[0]
-    ax1.plot(price_data["timestamp"], price_data["close"], label="Price", color="steelblue", linewidth=1)
+    timestamps = price_data["timestamp"] if "timestamp" in price_data.columns else price_data.index
+    ax1.plot(timestamps, price_data["close"], label="Price", color="steelblue", linewidth=1)
 
     # Plot buy/sell markers
     buys = [t for t in trades if t.direction == Direction.LONG]

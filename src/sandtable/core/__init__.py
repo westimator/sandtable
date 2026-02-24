@@ -10,6 +10,8 @@ from sandtable.core.events import (
     MarketDataEvent,
     OrderEvent,
     OrderType,
+    RiskAction,
+    RiskBreachEvent,
     SignalEvent,
 )
 from sandtable.core.result import BacktestResult
@@ -23,5 +25,7 @@ __all__ = [
     "MarketDataEvent",
     "OrderEvent",
     "OrderType",
+    "RiskAction",
+    "RiskBreachEvent",
     "SignalEvent",
 ]

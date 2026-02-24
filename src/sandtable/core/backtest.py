@@ -17,10 +17,11 @@ from sandtable.core.events import (
     OrderEvent,
     SignalEvent,
 )
-from sandtable.data_handlers.abstract_data_handler import AbstractDataHandler
+from sandtable.data_engine.handler import DataHandler
 from sandtable.execution.simulator import ExecutionSimulator
 from sandtable.metrics.performance import PerformanceMetrics, calculate_metrics
 from sandtable.portfolio.portfolio import Portfolio
+from sandtable.risk.abstract_risk_manager import AbstractRiskManager
 from sandtable.strategy.abstract_strategy import AbstractStrategy
 from sandtable.utils.logger import get_logger
 
@@ -43,21 +44,22 @@ class Backtest:
         executor: Simulates order execution
 
     Example:
-        >>> data = CSVDataHandler("data/spy.csv", "SPY")
+        >>> data = DataHandler(provider=CSVProvider("data/fixtures"), universe=["SPY"])
+        >>> data.load("2018-01-01", "2023-12-31")
         >>> strategy = MACrossoverStrategy(fast_period=10, slow_period=30)
         >>> portfolio = Portfolio(initial_capital=100_000)
         >>> executor = ExecutionSimulator()
         >>> backtest = Backtest(data, strategy, portfolio, executor)
         >>> metrics = backtest.run()
-        >>> print(metrics)
     """
 
     ## Properties
 
-    data_handler: AbstractDataHandler
+    data_handler: DataHandler
     strategy: AbstractStrategy
     portfolio: Portfolio
     executor: ExecutionSimulator
+    risk_manager: AbstractRiskManager | None = None
 
     _event_queue: EventQueue = field(init=False)
     _current_bars: dict[str, MarketDataEvent] = field(init=False, default_factory=dict)
@@ -177,6 +179,10 @@ class Backtest:
 
         # convert signal to order
         order = self.portfolio.signal_to_order(event, current_price)
+        if order is not None and self.risk_manager is not None:
+            order = self.risk_manager.evaluate(event, order, self.portfolio)
+            if order is None:
+                logger.debug("Risk manager blocked order for %s", event.symbol)
         if order is not None:
             self._event_queue.push(order)
 
@@ -184,7 +190,8 @@ class Backtest:
         """
         Handle order event.
 
-        Sends order to execution simulator for fill.
+        Validates against universe (if available), then sends order
+        to execution simulator for fill.
 
         Args:
             event: Order event to execute
@@ -197,13 +204,26 @@ class Backtest:
             event.order_type.name,
         )
 
+        # reject orders for symbols not in the universe
+        universe = self.data_handler.universe
+        if not universe.validate_order(event):
+            logger.warning("Order rejected: %s not in universe", event.symbol)
+            return
+
         current_bar = self._current_bars.get(event.symbol)
         if current_bar is None:
             logger.warning("No current bar for order execution")
             return
 
+        # look up instrument for tick/lot size rounding
+        instrument = None
+        try:
+            instrument = universe.get_instrument(event.symbol)
+        except KeyError:
+            pass
+
         # execute order and get fill
-        fill = self.executor.process_order(event, current_bar)
+        fill = self.executor.process_order(event, current_bar, instrument=instrument)
         self._event_queue.push(fill)
 
     def _handle_fill(self, event: FillEvent) -> None:

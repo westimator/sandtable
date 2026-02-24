@@ -2,31 +2,9 @@
 
 [![Tests](https://github.com/westimator/sandtable/actions/workflows/tests.yml/badge.svg)](https://github.com/westimator/sandtable/actions/workflows/tests.yml)
 
-A Python backtesting framework where all components communicate exclusively through a central event queue. This design enforces temporal causality and prevents look-ahead bias by construction.
+Event-driven backtesting for systematic trading strategies. Events are processed in strict timestamp order via a priority queue (`MARKET_DATA → SIGNAL → ORDER → FILL`). The data handler only exposes historical data up to the current bar, and orders are filled with configurable slippage, market impact, and commissions.
 
-## Why event-driven?
-
-Traditional backtesting frameworks often allow direct access to future data, making it easy to accidentally introduce look-ahead bias. This framework prevents that by design:
-
-1. <ins>Temporal causality:</ins> Events are processed in strict timestamp order via a priority queue
-2. <ins>No future data access:</ins> The `DataHandler` only exposes historical data up to the current bar
-3. <ins>Realistic execution:</ins> Orders are filled with configurable slippage, market impact, and commissions
-4. <ins>Clear data flow:</ins> Events flow in one direction: `MARKET_DATA → SIGNAL → ORDER → FILL`
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│ DataHandler │────▶│  Strategy   │────▶│  Portfolio  │────▶│  Executor   │
-│ (bars)      │     │  (signals)  │     │  (orders)   │     │  (fills)    │
-└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
-       │                   │                   │                   │
-       └───────────────────┴───────────────────┴───────────────────┘
-                                    │
-                           ┌────────▼────────┐
-                           │   Event Queue   │
-                           │  (priority by   │
-                           │   timestamp)    │
-                           └─────────────────┘
-```
+![Strategy comparison chart](docs/assets/Sandtable_comparison-chart.png)
 
 ## Installation
 
@@ -38,155 +16,246 @@ See [sandtable on PyPI](https://pypi.org/project/sandtable/) for available versi
 
 ### Development setup
 
-Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.13+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-# install uv (if you don't have it)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# create venv and install dependencies
+git clone https://github.com/westimator/sandtable.git
+cd sandtable
 uv sync
-
-# install with all extras (yfinance, matplotlib, plotly)
-uv pip install -e ".[all]"
-
-# or with dev dependencies (pytest, ruff, viz, reports)
-uv pip install -e ".[dev]"
 ```
 
-## Quick start
+### Docker services (optional)
 
-### One-liner API
+[MySQL](https://en.wikipedia.org/wiki/MySQL) is available via Docker Compose for result persistence. This is optional; SQLite works out of the box with no external services.
+
+Requires the [Docker Compose plugin](https://docs.docker.com/compose/install/). If `docker compose version` prints an error, install the plugin:
+
+```bash
+# install the plugin
+sudo mkdir -p /usr/local/lib/docker/cli-plugins
+sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+# verify
+docker compose version
+```
+
+Then start services:
+
+```bash
+# start in background
+docker compose up -d
+
+# stop services (data is preserved in Docker volumes)
+docker compose down
+```
+
+This starts:
+- MySQL 8.0 on port 3306 (user: `sandtable`, password: `sandtable`, database: `sandtable`)
+
+## Getting started
+
+### Run the demo
+
+Runs a full showcase with zero arguments - data loading, strategy backtests with realistic execution, risk management, parameter sweeps, walk-forward analysis, statistical significance tests, strategy comparison, persistence, and PDF report generation. Reports are saved to `output/`, results persisted to `sandtable.db`.
+
+```bash
+# default: SQLite result store, in-memory data from bundled CSVs
+uv run python demo.py
+
+# use MySQL for result persistence (requires docker compose up -d)
+uv run python demo.py --store mysql
+```
+
+### Launch the dashboard
+
+```bash
+# default: SQLite result store, in-memory data from bundled CSVs
+uv run streamlit run app.py
+
+# use MySQL for result persistence (requires docker compose up -d)
+uv run streamlit run app.py -- --result-backend mysql
+
+# see all options (connection params, db path, etc.)
+uv run streamlit run app.py -- --help
+```
+
+Opens a local Streamlit dashboard at `http://localhost:8501` with five pages:
+
+1. Backtest: Run a single strategy backtest with configurable execution and risk parameters.
+2. Sweep: Parameter grid search with results table and 2D heatmap.
+3. Walkforward: Walk-forward analysis with per-fold metrics and stitched OOS equity curve.
+4. Compare: Side-by-side strategy comparison with overlaid equity curves and correlation matrix.
+5. Runs: Browse, inspect, and manage persisted runs.
+
+Backend configuration (result store) is set once at startup via CLI flags and shown read-only on the Home page. Per-run settings (strategy, data source, symbols, dates, execution, risk) are configured in the sidebar.
+
+![Dashboard demo](docs/assets/Sandtable_demo.gif)
+
+## Python API
+
+### One-liner backtest
 
 ```python
-from sandtable import run_backtest, AbstractStrategy, SignalEvent, MarketDataEvent, Direction, FixedSlippage
+from sandtable import (
+    run_backtest, AbstractStrategy, SignalEvent,
+    MarketDataEvent, Direction, FixedSlippage,
+    DataHandler, CSVProvider,
+)
 
-class MeanReversion(AbstractStrategy):
-    lookback: int = 20
-    threshold: float = 2.0
-
+class MyStrategy(AbstractStrategy):
     def generate_signal(self, bar: MarketDataEvent) -> SignalEvent | None:
-        closes = self.get_historical_closes(self.lookback)
-        if len(closes) < self.lookback:
+        closes = self.get_historical_closes(20, symbol=bar.symbol)
+        if len(closes) < 20:
             return None
         mean = sum(closes) / len(closes)
-        std = (sum((c - mean) ** 2 for c in closes) / len(closes)) ** 0.5
-        if std == 0:
-            return None
-        z_score = (bar.close - mean) / std
-        if z_score < -self.threshold:
+        if bar.close < mean * 0.98:
             return SignalEvent(
                 timestamp=bar.timestamp, symbol=bar.symbol,
                 direction=Direction.LONG, strength=1.0,
             )
         return None
 
+data = DataHandler(provider=CSVProvider("data/fixtures"), universe=["SPY"])
+data.load("2018-01-01", "2023-12-31")
+
 result = run_backtest(
-    strategy=MeanReversion(),
-    symbols="SPY",
-    start="2022-01-01", end="2023-12-31",
+    strategy=MyStrategy(),
+    data=data,
     slippage=FixedSlippage(bps=5),
     commission=0.005,
 )
 print(result.metrics)
-result.tearsheet("tearsheet.pdf")
 ```
 
 ### Parameter sweep
 
 ```python
-from sandtable import Metric, run_parameter_sweep
+from sandtable import Metric, run_parameter_sweep, MeanReversionStrategy
 
 sweep = run_parameter_sweep(
-    strategy_class=MeanReversion,
+    strategy_class=MeanReversionStrategy,
     param_grid={"lookback": [10, 20, 30], "threshold": [1.5, 2.0, 2.5]},
-    symbols="SPY",
-    start="2022-01-01", end="2023-12-31",
+    data=data,
     metric=Metric.SHARPE_RATIO,
 )
 print(sweep.best_params)
 print(sweep.to_dataframe())
 ```
 
-### Run the example
-
-```bash
-uv run python examples/quick_start.py
-```
-
-## Usage
-
-### Basic backtest (manual wiring)
+### Walk-forward analysis
 
 ```python
-from sandtable import CSVDataHandler, MACrossoverStrategy
-from sandtable.core import Backtest
-from sandtable.execution import ExecutionConfig, ExecutionSimulator, FixedSlippage
-from sandtable.portfolio import Portfolio
+from sandtable import run_walkforward, MACrossoverStrategy
 
-# set up components
-data = CSVDataHandler("data/sample_ohlcv.csv", "SPY")
-strategy = MACrossoverStrategy(fast_period=10, slow_period=30)
-portfolio = Portfolio(initial_capital=100_000)
-executor = ExecutionSimulator(
-    config=ExecutionConfig(commission_per_share=0.005),
-    slippage_model=FixedSlippage(bps=5),
+wf = run_walkforward(
+    strategy_cls=MACrossoverStrategy,
+    param_grid={"fast_period": [5, 10, 15], "slow_period": [20, 30, 40]},
+    data=data,
+    train_window=252,
+    test_window=126,
+    optimization_metric=Metric.SHARPE_RATIO,
+)
+print(f"OOS Sharpe: {wf.oos_sharpe:.2f}")
+```
+
+### Risk management
+
+```python
+from sandtable import (
+    RiskManager, MaxLeverageRule, MaxDrawdownRule,
+    MaxDailyLossRule, MaxPositionSizeRule,
 )
 
-# run backtest
-backtest = Backtest(data, strategy, portfolio, executor)
-metrics = backtest.run()
-print(metrics)
-```
-
-### Custom strategy
-
-```python
-from sandtable import AbstractStrategy, MarketDataEvent, SignalEvent, Direction
-
-class MyStrategy(AbstractStrategy):
-    def generate_signal(self, bar: MarketDataEvent) -> SignalEvent | None:
-        closes = self.get_historical_closes(20)
-        if len(closes) < 20:
-            return None  # warmup period
-
-        # [your logic here]
-        if closes[-1] > sum(closes) / len(closes):
-            return SignalEvent(
-                timestamp=bar.timestamp,
-                symbol=bar.symbol,
-                direction=Direction.LONG,
-                strength=1.0,
-            )
-        return None
-```
-
-### Multi-symbol backtest
-
-```python
-from sandtable import run_backtest
+risk_manager = RiskManager(rules=[
+    MaxLeverageRule(max_leverage=2.0),
+    MaxDrawdownRule(max_drawdown_pct=0.15),
+    MaxDailyLossRule(max_daily_loss_pct=0.03),
+    MaxPositionSizeRule(max_position_pct=0.25),
+])
 
 result = run_backtest(
     strategy=MyStrategy(),
-    symbols=["SPY", "QQQ", "IWM"],
-    start="2022-01-01", end="2023-12-31",
+    data=data,
+    risk_manager=risk_manager,
 )
 ```
 
-### Tearsheet and comparison
+### Statistical significance
 
 ```python
-# Single strategy tearsheet
-result.tearsheet("tearsheet.pdf")
+sig = result.significance_tests(n_simulations=1000, random_seed=42)
+for name, sr in sig.items():
+    print(f"{name}: p={sr.p_value:.4f} {'*' if sr.is_significant else ''}")
+```
 
-# Compare multiple strategies
-from sandtable import compare_strategies
+### Persistence
 
-compare_strategies(
+```python
+from sandtable import SQLiteResultStore
+
+store = SQLiteResultStore("sandtable.db")
+
+# auto-persist during backtest
+result = run_backtest(strategy=MyStrategy(), data=data, result_store=store)
+
+# browse runs
+for run in store.list_runs(min_sharpe=1.0):
+    print(f"{run.strategy_name}: Sharpe={run.sharpe_ratio:.2f}")
+
+# reload a run
+config, result = store.load_run(run.run_id)
+```
+
+MySQL is a drop-in replacement:
+
+```python
+from sandtable import MySQLResultStore
+
+store = MySQLResultStore(
+    host="localhost",
+    port=3306,
+    user="sandtable",
+    password="sandtable",
+    database="sandtable",
+)
+```
+
+### Reports
+
+```python
+from sandtable import generate_pdf_tearsheet, generate_risk_report, generate_comparison_report
+
+generate_pdf_tearsheet(result, output_path="tearsheet.pdf")
+generate_risk_report(result, output_path="risk_report.pdf")
+generate_comparison_report(
     {"Strategy A": result_a, "Strategy B": result_b},
     output_path="comparison.pdf",
 )
 ```
+
+## How it works
+
+The core is an event loop. On each bar the `DataHandler` emits a `MarketDataEvent`, the strategy decides whether to emit a `SignalEvent`, the portfolio sizes it into an `OrderEvent`, the risk manager approves/resizes/rejects it, and the execution simulator fills it as a `FillEvent` with slippage, spread, and commission applied. All events are frozen dataclasses. The queue is a heap sorted by `(timestamp, priority)` so events at the same timestamp always process in the right order.
+
+Three orthogonal enums control where data comes from and where it goes:
+
+| Enum | Values | Purpose |
+|---|---|---|
+| `DataSource` | `csv`, `yfinance` | where market data originates |
+| `DataBackend` | `memory` | where market data lives at query time |
+| `ResultBackend` | `sqlite`, `mysql` | where backtest results are persisted |
+
+### Event types
+
+| Event | Key fields | Emitted by | Consumed by |
+|---|---|---|---|
+| `MarketDataEvent` | symbol, timestamp, OHLCV | DataHandler | Strategy, Portfolio |
+| `SignalEvent` | symbol, direction, strength | Strategy | Portfolio |
+| `OrderEvent` | symbol, direction, quantity, order_type | Portfolio (after risk check) | ExecutionSimulator |
+| `FillEvent` | symbol, fill_price, commission, slippage, market_impact | ExecutionSimulator | Portfolio |
+| `RiskBreachEvent` | rule_name, action, breach_value, threshold | RiskManager | logged, not queued |
 
 ### Execution models
 
@@ -214,53 +283,23 @@ executor = ExecutionSimulator(
 )
 ```
 
-## Project structure
+### Risk rules
 
-```
-src/sandtable/
-├── __init__.py        # Public API exports
-├── api.py             # run_backtest(), run_parameter_sweep()
-├── config.py          # Configuration dataclasses
-├── core/              # Events, queue, backtest engine, result
-├── data_handlers/     # DataHandler protocol, CSV, yfinance, multi-symbol
-├── strategy/          # Strategy base class and implementations
-├── execution/         # Slippage, impact, and fill simulation
-├── portfolio/         # Position and cash management
-├── metrics/           # Performance calculation
-├── report/            # PDF tearsheet and strategy comparison
-├── utils/             # Shared utilities
-└── viz/               # matplotlib charts and animation
-```
+Seven composable rules sit between signal generation and order submission:
 
-## Running tests
+| Rule | What it does |
+|---|---|
+| `MaxPositionSizeRule` | caps single-position value as fraction of equity |
+| `MaxPortfolioExposureRule` | caps gross portfolio exposure |
+| `MaxLeverageRule` | caps gross exposure / equity ratio |
+| `MaxOrderSizeRule` | hard reject on orders exceeding a quantity limit |
+| `MaxDailyLossRule` | blocks all trading after intraday loss threshold |
+| `MaxDrawdownRule` | halts strategy permanently after drawdown threshold |
+| `MaxConcentrationRule` | caps single-position value as fraction of gross exposure |
 
-```bash
-# run all tests
-uv run python -m pytest
+All rejections and resizes are logged as `RiskBreachEvent` records.
 
-# run with verbose output
-uv run python -m pytest -v
-
-# run specific test file
-uv run python -m pytest tests/core/test_event_queue.py
-
-# run with coverage
-uv run python -m coverage run --include="src/sandtable/*" -m pytest tests/
-uv run python -m coverage report --show-missing
-```
-
-## Design decisions
-
-1. <ins>Lookahead Prevention:</ins> `DataHandler.get_historical_bars(n)` only returns data before the current index
-2. <ins>Event Ordering:</ins> Priority queue with `(timestamp, counter)` ensures correct ordering and FIFO for same-timestamp events
-3. <ins>Fill Price Bounds:</ins> Fill prices are clamped to the bar's `[low, high]` range
-4. <ins>Short Positions:</ins> Cash increases on short sale, decreases on cover, with correct P&L tracking
-5. <ins>Warmup Period:</ins> Strategies return `None` until they have enough data for their indicators
-6. <ins>Multi-symbol:</ins> `MultiDataHandler` merges bars from multiple sources via min-heap for correct temporal ordering
-
-## Performance metrics
-
-The `PerformanceMetrics` dataclass includes:
+### Metrics
 
 | Category | Metrics |
 |----------|---------|
@@ -268,20 +307,57 @@ The `PerformanceMetrics` dataclass includes:
 | Risk | `sharpe_ratio`, `sortino_ratio`, `max_drawdown` |
 | Trades | `num_trades`, `win_rate`, `profit_factor`, `avg_trade_pnl` |
 
-## Further reading
+## Project structure
 
-Related concepts:
+```
+sandtable/
+├── src/sandtable/
+│   ├── core/           # events, event queue, backtest engine, result
+│   ├── strategy/       # AbstractStrategy, MA crossover, mean reversion, buy-and-hold
+│   ├── portfolio/      # position tracking, cash, equity curve, P&L
+│   ├── execution/      # slippage, spread, market impact, commissions
+│   ├── risk/           # risk manager, 7 composable rules, VaR
+│   ├── data/           # Instrument, Equity, Future, Universe, TradingHours
+│   ├── data_engine/    # CSV/YFinance providers, caching, DataHandler
+│   ├── data_types/     # DataSource, DataBackend, ResultBackend, Metric enums
+│   ├── research/       # parameter sweeps, walk-forward, strategy comparison
+│   ├── stats/          # permutation test, t-test, block bootstrap
+│   ├── metrics/        # Sharpe, Sortino, CAGR, drawdown, trade stats
+│   ├── persistence/    # SQLite and MySQL result stores
+│   ├── report/         # HTML tearsheet and comparison
+│   ├── reporting/      # PDF tearsheet, TCA, risk reports
+│   ├── viz/            # matplotlib charts, animation
+│   ├── ui/             # shared Streamlit components
+│   ├── utils/          # logging, exceptions, CLI helpers
+│   ├── api.py          # run_backtest(), run_parameter_sweep()
+│   └── config.py       # Settings with BACKTESTER_* env var backing
+├── pages/              # Streamlit pages (Backtest, Sweep, Walkforward, Compare, Runs)
+├── tests/unit/         # 380+ tests
+├── data/fixtures/      # bundled CSVs (SPY, QQQ, IWM, AAPL, MSFT 2018-2023)
+├── demo.py             # full-feature showcase script
+├── app.py              # Streamlit entry point
+├── docker-compose.yml  # MySQL 8
+└── pyproject.toml
+```
+
+## Running tests
+
+```bash
+uv run pytest tests/ -q          # all tests
+uv run pytest tests/ -v          # verbose
+uv run pytest tests/unit/strategy/test_ma_crossover.py -v  # single file
+uv run ruff check .              # lint
+```
+
+## Further reading
 
 - [Backtesting](https://en.wikipedia.org/wiki/Backtesting)
 - [Event-driven architecture](https://en.wikipedia.org/wiki/Event-driven_architecture)
 - [Moving average crossover](https://en.wikipedia.org/wiki/Moving_average_crossover)
 - [Mean reversion](https://en.wikipedia.org/wiki/Mean_reversion_(finance))
 - [Sharpe ratio](https://en.wikipedia.org/wiki/Sharpe_ratio)
-- [Sortino ratio](https://en.wikipedia.org/wiki/Sortino_ratio)
-- [Maximum drawdown](https://en.wikipedia.org/wiki/Drawdown_(economics))
-- [CAGR](https://en.wikipedia.org/wiki/Compound_annual_growth_rate)
-- [Slippage](https://en.wikipedia.org/wiki/Slippage_(finance))
-- [Market impact](https://en.wikipedia.org/wiki/Market_impact)
+- [Walk-forward analysis](https://en.wikipedia.org/wiki/Walk_forward_optimization)
+- [Value at Risk](https://en.wikipedia.org/wiki/Value_at_risk)
 
 ## License
 

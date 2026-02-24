@@ -11,10 +11,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum, auto
+from enum import StrEnum
 
+## Enums
 
-class EventType(Enum):
+class EventType(StrEnum):
     """
     Types of events in the backtesting system.
 
@@ -24,13 +25,13 @@ class EventType(Enum):
         ORDER: A request to buy or sell a specific quantity of shares has been submitted.
         FILL: An order has been executed and the trade is complete with final price and costs.
     """
-    MARKET_DATA = auto()
-    SIGNAL = auto()
-    ORDER = auto()
-    FILL = auto()
+    MARKET_DATA = "market_data"
+    SIGNAL = "signal"
+    ORDER = "order"
+    FILL = "fill"
 
 
-class Direction(Enum):
+class Direction(StrEnum):
     """
     Trading direction for signals, orders, and fills.
 
@@ -38,11 +39,11 @@ class Direction(Enum):
         LONG: Betting the price will go up / buy shares hoping to sell them later at a higher price.
         SHORT: Betting the price will go down / borrow and sell shares hoping to buy them back cheaper.
     """
-    LONG = auto()
-    SHORT = auto()
+    LONG = "long"
+    SHORT = "short"
 
 
-class OrderType(Enum):
+class OrderType(StrEnum):
     """
     Order types supported by the execution simulator.
 
@@ -50,9 +51,25 @@ class OrderType(Enum):
         MARKET: Execute immediately at the current market price, guaranteeing a fill but not the price.
         LIMIT: Execute only at a specified price or better, guaranteeing the price but not a fill.
     """
-    MARKET = auto()
-    LIMIT = auto()
+    MARKET = "market"
+    LIMIT = "limit"
 
+
+class RiskAction(StrEnum):
+    """
+    Action taken by a risk rule on a proposed order.
+
+    Attributes:
+        REJECTED: The order was completely blocked and will not be executed.
+        RESIZED: The order quantity was reduced to satisfy the rule's threshold.
+        HALTED: Trading was stopped entirely due to a portfolio-level breach (e.g., max drawdown).
+    """
+    REJECTED = "rejected"
+    RESIZED = "resized"
+    HALTED = "halted"
+
+
+## Dataclasses
 
 @dataclass(frozen=True)
 class MarketDataEvent:
@@ -174,3 +191,31 @@ class FillEvent:
         Total transaction cost including commission, slippage, and impact.
         """
         return self.commission + self.slippage + self.market_impact
+
+
+@dataclass(frozen=True)
+class RiskBreachEvent:
+    """
+    Logged when a risk rule rejects, resizes, or halts an order.
+
+    Note: this is a log record, not a routable event. It is stored in
+    RiskManager.breach_log and never pushed onto the EventQueue.
+
+    Attributes:
+        timestamp: When the breach occurred
+        rule_name: Name of the rule that triggered
+        symbol: Ticker symbol of the order
+        proposed_qty: Original order quantity before the rule acted
+        action: What the rule did - REJECTED, RESIZED, or HALTED
+        breach_value: The metric value that breached the threshold
+        threshold: The rule's configured limit
+        final_qty: Resized quantity, or None if rejected/halted
+    """
+    timestamp: datetime
+    rule_name: str
+    symbol: str
+    proposed_qty: int
+    action: RiskAction
+    breach_value: float
+    threshold: float
+    final_qty: int | None = None

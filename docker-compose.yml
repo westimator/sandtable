@@ -1,0 +1,24 @@
+# docker-compose.yml
+
+services:
+
+  # MySQL for backtest result persistence (result backend)
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: sandtable
+      MYSQL_USER: sandtable
+      MYSQL_PASSWORD: sandtable
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql_data:

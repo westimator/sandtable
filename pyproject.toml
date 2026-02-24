@@ -2,18 +2,28 @@
 
 [project]
 name = "sandtable"
-version = "0.1.1"
-description = "Event-driven backtesting framework with realistic execution modeling"
+version = "0.2.0"
+description = "Event-driven backtesting and research simulation platform for systematic trading strategies"
 readme = "README.md"
-requires-python = ">=3.12.1,<3.13"
+requires-python = ">=3.13.1,<3.14"
 license = {file = "LICENSE"}
 
 authors = [{ name = "Westimator" }]
 dependencies = [
+    "ipykernel>=6.29",
     "matplotlib>=3.8",
+    "mysql-connector-python>=9.0",
     "numpy>=1.24",
     "pandas>=2.0",
+    "plotly>=5.18",
+    "pyarrow>=14.0",
+    "pytest>=8.0",
+    "pytest-cov>=7.0",
     "python-dotenv>=1.0",
+    "rich>=13.0",
+    "ruff>=0.4",
+    "scipy>=1.11",
+    "streamlit>=1.30",
     "tabulate>=0.9",
     "weasyprint>=62.0",
     "yfinance>=0.2",
@@ -21,13 +31,6 @@ dependencies = [
 
 [project.urls]
 Repository = "https://github.com/westimator/sandtable"
-
-[project.optional-dependencies]
-dev = [
-    "ipykernel>=6.29",
-    "pytest>=8.0",
-    "ruff>=0.4",
-]
 
 [build-system]
 requires = ["hatchling"]
@@ -45,8 +48,4 @@ select = ["E", "F", "I", "W"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-[dependency-groups]
-dev = [
-    "pytest-cov>=7.0.0",
-]
+addopts = "--cov=sandtable"
