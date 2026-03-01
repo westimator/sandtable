@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
@@ -66,7 +67,7 @@ def generate_risk_report(
     return output_path
 
 
-def _page_breach_log(pdf: PdfPages, breaches: list) -> None:
+def _page_breach_log(pdf: PdfPages, breaches: list[RiskBreachEvent | dict[str, Any]]) -> None:
     """Render risk breach log as a table."""
     fig, ax = plt.subplots(figsize=(12, max(3, min(10, len(breaches) * 0.3 + 2))))
     ax.axis("off")
@@ -114,7 +115,7 @@ def _page_breach_log(pdf: PdfPages, breaches: list) -> None:
     plt.close(fig)
 
 
-def _page_risk_summary(pdf: PdfPages, result: BacktestResult, breaches: list) -> None:
+def _page_risk_summary(pdf: PdfPages, result: BacktestResult, breaches: list[RiskBreachEvent | dict[str, Any]]) -> None:
     """Summary statistics page."""
     fig, ax = plt.subplots(figsize=(10, 4))
     ax.axis("off")

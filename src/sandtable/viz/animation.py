@@ -22,12 +22,12 @@ class AnimationState:
     """Tracks state for the animation."""
 
     current_frame: int = 0
-    buy_times: list = None
-    buy_prices: list = None
-    sell_times: list = None
-    sell_prices: list = None
+    buy_times: list | None = None
+    buy_prices: list | None = None
+    sell_times: list | None = None
+    sell_prices: list | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.buy_times = []
         self.buy_prices = []
         self.sell_times = []
@@ -122,7 +122,7 @@ def animate_backtest(
     # Animation state
     state = AnimationState()
 
-    def init():
+    def init() -> tuple:
         """Initialize animation."""
         price_line.set_data([], [])
         equity_line.set_data([], [])
@@ -133,7 +133,7 @@ def animate_backtest(
         info_text.set_text("")
         return price_line, equity_line, buy_scatter, sell_scatter, info_text
 
-    def update(frame):
+    def update(frame: int) -> tuple:
         """Update animation for each frame."""
         # Update price line
         price_line.set_data(timestamps[: frame + 1], prices[: frame + 1])

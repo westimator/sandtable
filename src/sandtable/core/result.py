@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
@@ -20,6 +20,9 @@ from sandtable.metrics.performance import PerformanceMetrics
 from sandtable.portfolio.portfolio import EquityPoint
 from sandtable.report.tearsheet import generate_tearsheet
 from sandtable.viz.charts import plot_backtest_results
+
+if TYPE_CHECKING:
+    from sandtable.stats.significance import SignificanceResult
 
 
 @dataclass(frozen=True)
@@ -107,7 +110,7 @@ class BacktestResult:
         n_simulations: int = 1000,
         significance_level: float = 0.05,
         random_seed: int | None = None,
-    ) -> dict:
+    ) -> dict[str, SignificanceResult]:
         """
         Run statistical significance tests on this backtest's returns.
 

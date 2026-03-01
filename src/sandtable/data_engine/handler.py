@@ -42,7 +42,7 @@ class DataHandler:
     def __init__(
         self,
         provider: AbstractDataProvider,
-        universe: Universe | list[str] = None,
+        universe: Universe | list[str] | None = None,
     ) -> None:
         """
         Args:

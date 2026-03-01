@@ -7,6 +7,8 @@ Calculates returns, risk metrics, and trade statistics from
 equity curves and trade histories.
 """
 
+from __future__ import annotations
+
 import math
 from dataclasses import dataclass
 
@@ -305,7 +307,7 @@ def calculate_max_drawdown(equities: list[float]) -> float:
     return max_drawdown
 
 
-def _calculate_trade_metrics(trades: list[FillEvent]) -> dict:
+def _calculate_trade_metrics(trades: list[FillEvent]) -> dict[str, int | float]:
     """
     Calculate trade-based metrics from fill events.
 
@@ -358,7 +360,7 @@ def _calculate_trade_metrics(trades: list[FillEvent]) -> dict:
     }
 
 
-def _extract_round_trips(trades: list[FillEvent]) -> list[dict]:
+def _extract_round_trips(trades: list[FillEvent]) -> list[dict[str, float | str]]:
     """
     Extract round-trip trades from fill events.
 

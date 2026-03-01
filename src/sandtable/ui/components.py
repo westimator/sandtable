@@ -16,7 +16,7 @@ import streamlit as st
 
 from sandtable.config import BacktestConfig
 from sandtable.core.result import BacktestResult
-from sandtable.data_engine import CachingProvider, CSVProvider, DataHandler, YFinanceProvider
+from sandtable.data_engine import AbstractDataProvider, CachingProvider, CSVProvider, DataHandler, YFinanceProvider
 from sandtable.data_types import DataSource, ResultBackend
 from sandtable.execution.simulator import ExecutionConfig
 from sandtable.persistence import AbstractResultStore, SQLiteResultStore
@@ -190,7 +190,7 @@ def risk_config_sidebar(key_prefix: str = "") -> RiskManager | None:
     return RiskManager(rules=rules)
 
 
-def data_source_selector(key_prefix: str = "") -> tuple[object, list[str]]:
+def data_source_selector(key_prefix: str = "") -> tuple[AbstractDataProvider, list[str]]:
     """
     Data source selection with symbol inputs.
 
@@ -446,11 +446,25 @@ def param_grid_builder(strategy_cls: type[AbstractStrategy], key_prefix: str = "
     return param_grid
 
 
-def build_data_handler(symbols: list[str], start_date: str, end_date: str, provider=None):
+def build_data_handler(
+    symbols: list[str],
+    start_date: str,
+    end_date: str,
+    provider: AbstractDataProvider | None = None,
+) -> DataHandler:
     """
-    Build a DataHandler with date slicing.
+    Build a DataHandler and load data for the given date range.
 
-    Defaults to CSVProvider with bundled fixtures when provider is None.
+    Args:
+        symbols: Ticker symbols to load.
+        start_date: Start date as ``YYYY-MM-DD``.
+        end_date: End date as ``YYYY-MM-DD``.
+        provider: Data provider to use. Defaults to a CSVProvider backed
+            by the bundled fixtures directory.
+
+    Returns:
+        A DataHandler with data pre-loaded for *symbols* over
+        [*start_date*, *end_date*].
     """
     if provider is None:
         provider = CSVProvider(data_dir="data/fixtures")
